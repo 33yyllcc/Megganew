@@ -1,0 +1,14 @@
+/
+/robots.txt
+/admin
+/login
+/search
+/messages
+/profile
+/tools
+/debug
+/download
+/upload
+/config
+/.env
+/.git/config

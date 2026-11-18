@@ -1,0 +1,10 @@
+{
+  "_note": "ملف النطاق: الأداة ترفض أي هدف بدون سجل تحقق TXT (إلا loopback).",
+  "auth_token": "eed8634311cde9ec8f03516aa2a3dbcd",
+  "targets": [
+    {"url": "https://admin.mazums.org", "auth_domain": "mazums.org"},
+    {"url": "https://map.mazums.org",   "auth_domain": "mazums.org"},
+    {"url": "https://m.mazums.org",     "auth_domain": "mazums.org"},
+    {"url": "https://mc.mazums.org",    "auth_domain": "mazums.org"}
+  ]
+}

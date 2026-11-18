@@ -37,3 +37,16 @@ Command Injection · Path Traversal · SSTI · Insecure File Upload
 
 المهارات هنا للتعلّم. طبّقها **فقط** على أنظمة عندك عليها **تفويض مكتوب وموثّق**
 وضمن النطاق المتفق عليه. راجع `GUIDE.md` و `engagement/SCOPE.md`.
+
+---
+
+## 🛰️ نظام الفحص (scanner/)
+
+framework فحص أمني مُسلسَل (recon → discover → assess → report) مع **بوابة نطاق**
+تمنع الفحص إلا على دومين أثبتّ ملكيته بسجل DNS TXT. راجع `scanner/README.md`.
+
+```bash
+cd scanner
+python -m megganew_scan.cli verify --scope scope.json   # تحقّق من الملكية
+python -m megganew_scan.cli run    --scope scope.json --active
+```

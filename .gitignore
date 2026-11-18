@@ -4,3 +4,6 @@ __pycache__/
 lab/lab.db
 lab/uploads/*
 !lab/uploads/.gitkeep
+scanner/output/
+scanner/scope.local.json
+*.egg-info/
