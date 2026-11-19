@@ -9,6 +9,15 @@
   - Missing Rate Limiting: هل يسمح بمحاولات غير محدودة (قابل للتخمين)؟
   - Weak Session Cookies: غياب HttpOnly/Secure/SameSite.
   - JWT Weaknesses: alg:none أو خوارزمية ضعيفة إن وُجد توكن.
+  - Clickjacking على صفحة الدخول: هل يمكن تضمينها بإطار (iframe) لخداع
+    المستخدم يضغط زراً حقيقياً بدون علمه (UI redressing)؟
+  - CSRF على نموذج الدخول/الجلسة: هل يوجد توكن CSRF يمنع إرسال الفورم
+    من موقع خارجي؟
+  - Username Enumeration: هل رسالة الخطأ تكشف وجود/عدم وجود المستخدم؟
+    (يسهّل على مهاجم استهداف حسابات حقيقية بالاسم).
+
+كل هذي فحوص على **تطبيقك نفسه** (ضوابطه البرمجية) — وليست أدوات خداع
+لبشر آخرين. لا تُنشئ هذي الوحدة أي صفحة مزوّرة ولا ترسل لأي طرف ثالث.
 
 يتطلب --active (يرسل POST). الهدف: تعرف نقاط ضعف الدخول لتقوّيها —
 بحدود مسؤولة (قوائم صغيرة، بلا تخمين جماعي/brute-force).
@@ -101,6 +110,10 @@ def _test_login(session, page_url, findings):
         return
     action, uf, pf = form["action"], form["user_field"], form["pass_field"]
 
+    _clickjacking_check(session, page_url, findings)
+    _csrf_check(session, page_url, form, findings)
+    _username_enum_check(session, page_url, form, findings)
+
     # خط الأساس: دخول خاطئ مؤكّد
     rnd = uuid.uuid4().hex
     base_r = session.post(action, data={uf: "nouser_" + rnd, pf: "nopass_" + rnd})
@@ -150,6 +163,57 @@ def _test_login(session, page_url, findings):
             "6 محاولات فاشلة متتالية بلا حظر/تأخير — عرضة للتخمين (brute-force).",
             "A07: Identification & Authentication Failures",
             "طبّق تحديد معدّل المحاولات + قفل مؤقت + CAPTCHA بعد عدة محاولات."))
+
+
+def _clickjacking_check(session, page_url, findings):
+    """هل تسمح صفحة الدخول بالتضمين بإطار (iframe) من موقع آخر؟"""
+    r = session.get(page_url)
+    headers = {k.lower(): v for k, v in dict(getattr(r, "headers", {})).items()}
+    xfo = headers.get("x-frame-options", "")
+    csp = headers.get("content-security-policy", "")
+    has_frame_ancestors = "frame-ancestors" in csp.lower()
+    if not xfo and not has_frame_ancestors:
+        findings.append(_finding(
+            "صفحة الدخول قابلة للتضمين بإطار خارجي (Clickjacking)", "متوسطة",
+            page_url,
+            "لا يوجد X-Frame-Options ولا CSP frame-ancestors — يمكن تضمين "
+            "صفحة الدخول داخل إطار مخفي بموقع آخر لخداع المستخدم (UI redressing).",
+            "A05: Security Misconfiguration",
+            "أضف X-Frame-Options: DENY (أو SAMEORIGIN) وCSP frame-ancestors 'none'."))
+
+
+def _csrf_check(session, page_url, form, findings):
+    """هل نموذج الدخول/تسجيل بلا توكن CSRF يحمي من إرسال خارجي؟"""
+    csrf_markers = ("csrf", "token", "_token", "authenticity", "nonce")
+    has_token = any(any(m in n.lower() for m in csrf_markers) for n in form["names"])
+    if not has_token:
+        findings.append(_finding(
+            "نموذج الدخول بلا توكن CSRF", "منخفضة", form["action"],
+            f"الحقول الموجودة: {form['names']} — لا حقل يشبه توكن CSRF.",
+            "A01: Broken Access Control / CSRF",
+            "أضف توكن CSRF فريد لكل جلسة وتحقّق منه عند الإرسال؛ "
+            "استخدم كوكيز SameSite=Lax/Strict كطبقة دفاع إضافية."))
+
+
+def _username_enum_check(session, page_url, form, findings):
+    """هل الخطأ يختلف بين مستخدم موجود (كلمة سر خطأ) وغير موجود؟"""
+    action, uf, pf = form["action"], form["user_field"], form["pass_field"]
+    rnd = uuid.uuid4().hex[:10]
+    # مستخدم شبه مؤكّد غير موجود
+    r_unknown = session.post(action, data={uf: "nouser_" + rnd, pf: "x" + rnd})
+    # أسماء شائعة محتمل وجودها (admin قد يكون حقيقياً بتطبيقك)
+    for candidate in ("admin", "test", "user"):
+        r_known = session.post(action, data={uf: candidate, pf: "x" + rnd})
+        b1, b2 = _body(r_unknown), _body(r_known)
+        if b1 and b2 and b1 != b2 and abs(len(b1) - len(b2)) > 10:
+            findings.append(_finding(
+                "تعداد أسماء المستخدمين (Username Enumeration)", "منخفضة", action,
+                f"رسالة/استجابة مختلفة بين مستخدم وهمي ومستخدم «{candidate}» — "
+                "يمكن استنتاج وجود حسابات حقيقية.",
+                "A07: Identification & Authentication Failures",
+                "استخدم رسالة خطأ عامة موحّدة («بيانات الدخول غير صحيحة») "
+                "لكل الحالات، وزمن استجابة ثابت."))
+            break
 
 
 def _jwt_checks(recon, findings):

@@ -18,6 +18,38 @@ import uuid
 
 SENSITIVE = ("admin", "config", "debug", "backup", "stats", "system",
              "internal", "private", "secret", "user", "wallet")
+
+# قائمة أوسع لملفات حساسة شائعة: أسرار، نسخ احتياطية، إعدادات، خرائط مصدر.
+# كل عنصر: (المسار, الخطورة, الوصف). الفحص إثباتي فقط — عيّنة محدودة لا تنزيل كامل.
+EXPOSED_FILE_PATHS = [
+    (".env", "حرجة", "متغيرات بيئة (غالباً تحتوي أسرار/مفاتيح)"),
+    (".env.local", "حرجة", "متغيرات بيئة محلية"),
+    (".env.production", "حرجة", "متغيرات بيئة إنتاج"),
+    (".git/config", "عالية", "إعداد مستودع Git (قد يسمح باستنساخ الكود كاملاً)"),
+    (".git/HEAD", "عالية", "مؤشر على مستودع .git مكشوف بجذر الويب"),
+    (".svn/entries", "عالية", "مستودع SVN مكشوف"),
+    ("wp-config.php", "حرجة", "إعداد ووردبريس (بيانات اتصال قاعدة بيانات)"),
+    ("config.json", "عالية", "ملف إعداد عام"),
+    ("config.yml", "عالية", "ملف إعداد عام (YAML)"),
+    ("docker-compose.yml", "متوسطة", "إعداد Docker (قد يكشف بنية الخدمات/منافذ)"),
+    ("Dockerfile", "منخفضة", "ملف بناء الحاوية"),
+    ("package.json", "منخفضة", "يكشف تبعيات/إصدار المشروع"),
+    ("composer.json", "منخفضة", "يكشف تبعيات PHP"),
+    ("backup.zip", "عالية", "نسخة احتياطية مضغوطة محتملة"),
+    ("backup.sql", "حرجة", "تفريغ قاعدة بيانات محتمل"),
+    ("database.sql", "حرجة", "تفريغ قاعدة بيانات محتمل"),
+    ("dump.sql", "حرجة", "تفريغ قاعدة بيانات محتمل"),
+    ("app.js.map", "متوسطة", "خريطة مصدر (تكشف الكود المصدري الأصلي)"),
+    ("main.js.map", "متوسطة", "خريطة مصدر (تكشف الكود المصدري الأصلي)"),
+    ("bundle.js.map", "متوسطة", "خريطة مصدر (تكشف الكود المصدري الأصلي)"),
+    (".DS_Store", "منخفضة", "يكشف أسماء ملفات/مجلدات الخادم"),
+    ("phpinfo.php", "عالية", "يكشف تفاصيل بيئة PHP بالكامل"),
+    ("server-status", "متوسطة", "حالة خادم Apache (قد تكشف IPs/طلبات حيّة)"),
+    ("id_rsa", "حرجة", "مفتاح SSH خاص محتمل"),
+    (".ssh/id_rsa", "حرجة", "مفتاح SSH خاص محتمل"),
+    ("credentials.json", "حرجة", "ملف اعتمادات"),
+    (".htpasswd", "عالية", "هاشات كلمات سر HTTP Basic Auth"),
+]
 SQL_ERRORS = re.compile(
     r"(SQL syntax|sqlite3\.|psycopg2|mysqli?_|ORA-\d{5}|SQLSTATE|"
     r"unclosed quotation|near \".*\": syntax error)", re.I)
@@ -37,11 +69,29 @@ def _looks_sensitive(url):
     return any(s in url.lower() for s in SENSITIVE)
 
 
+def _file_exposure_sweep(session, base, findings):
+    """يفحص قائمة واسعة من الملفات الحساسة الشائعة على جذر الموقع.
+    كل فحص GET واحد، عيّنة إثبات محدودة فقط — لا تنزيل كامل لأي ملف."""
+    for path, severity, desc in EXPOSED_FILE_PATHS:
+        r = session.get(base.rstrip("/") + "/" + path)
+        code = getattr(r, "status_code", 0)
+        body = getattr(r, "_body_sample", "")
+        if code == 200 and body.strip() and "<html" not in body.lower()[:200]:
+            findings.append(_finding(
+                f"ملف حساس مكشوف: {path}", severity, base + "/" + path,
+                f"{desc}. عيّنة: {body[:200]}",
+                "A05: Security Misconfiguration / A01 (Sensitive Data Exposure)",
+                "امنع الوصول لهذا الملف من إعدادات الخادم، وأزله من جذر الويب "
+                "إن لم يكن ضرورياً للتشغيل العام."))
+
+
 def run(session, discovered, allow_active=False):
     findings = []
     for url, info in discovered.items():
         base = info["base"]
         endpoints = info["all_endpoints"]
+
+        _file_exposure_sweep(session, base, findings)
 
         for ep in endpoints:
             low = ep.lower()
