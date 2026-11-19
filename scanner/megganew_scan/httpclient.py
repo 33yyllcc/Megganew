@@ -88,12 +88,23 @@ class SafeSession:
         if m in ("DELETE", "PUT", "PATCH"):
             raise Blocked(f"مُنع (طريقة مدمّرة {m}): {url}")
 
-    def request(self, method, url, **kw):
+    def request(self, method, url, isolate_cookies=False, **kw):
+        """
+        isolate_cookies=True: يرسل هذا الطلب بدون أي كوكيز متراكمة من وحدات
+        سابقة بنفس الجلسة (مثلاً كوكي جلسة نجح فيها authtest بدخول حقيقي).
+        ضروري لأي فحص يريد محاكاة "زائر غير مسجَّل دخول حقيقةً" — وإلا قد
+        تُقرأ صلاحية حقيقية مكتسبة سابقاً على أنها "ثغرة وصول بلا تحقق"
+        أو تُخفي ثغرة انتحال صلاحية حقيقية (لأن الوصول أصلاً مصرَّح به فعلياً).
+        """
         self._check_verified(url)     # ← البوابة قبل أي شيء
         self._guard(method, url)
         self._throttle()
         kw.setdefault("timeout", self.timeout)
         kw.setdefault("allow_redirects", False)
+        saved = None
+        if isolate_cookies:
+            saved = requests.utils.dict_from_cookiejar(self._s.cookies)
+            self._s.cookies.clear()
         try:
             r = self._s.request(method, url, stream=True, **kw)
             body = r.raw.read(self.max_bytes, decode_content=True) or b""
@@ -102,6 +113,11 @@ class SafeSession:
             return r
         except requests.RequestException as e:
             return _Err(str(e))
+        finally:
+            if isolate_cookies:
+                self._s.cookies.clear()
+                if saved:
+                    self._s.cookies.update(saved)
 
     def get(self, url, **kw):
         return self.request("GET", url, **kw)

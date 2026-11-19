@@ -4,8 +4,8 @@
 صُمّم تنصبه وتشغّله بنفسك على **بنيتك المملوكة والمُتحقَّق منها** لفحص حماية تطبيقك.
 
 ```
- verification → recon → discover → authtest → extract → assess → report
-   (التحقق)    (استطلاع) (اكتشاف)  (الدخول)  (السحب)   (تقييم)   (تقرير)
+ verification → recon → discover → authtest → privesc → extract → assess → report
+   (التحقق)    (استطلاع) (اكتشاف)  (الدخول)  (الانتحال) (السحب)   (تقييم)   (تقرير)
 ```
 
 **بوابة التحقق تحكم كل شيء:** عميل HTTP يرفض أي طلب لهدف غير متحقَّق من ملكيته،
@@ -34,12 +34,16 @@
 | 0 | `verification` | **الملف الوحيد للتحقق** — إثبات ملكية الهدف (DNS TXT) | بوابة كل الطلبات |
 | 1 | `recon` | تقرأ الهيدرز، تبصم التقنية، تحلّل رؤوس الأمان، TLS، DNS، كوكيز | معلومات كل هدف |
 | 2 | `discover` | تستخرج نقاط API من ملفات JS + قائمة كلمات مسارات | قائمة نقاط النهاية |
-| 3 | `authtest` | تجاوز الدخول: SQLi bypass، بيانات افتراضية، rate limiting، JWT | ثغرات مصادقة |
-| 4 | `extract` | سحب البيانات: SQLi (error/boolean/UNION PoC)، IDOR | ثغرات سحب بيانات |
-| 5 | `assess` | Access Control، Misconfig، CORS، XSS، ملفات مكشوفة | ثغرات عامة |
-| 6 | `report` | تجمع الكل بتقرير Markdown + JSON بخطورة وتصنيف OWASP | `report.md` / `report.json` |
+| 3 | `authtest` | تجاوز الدخول: SQLi bypass، بيانات افتراضية، rate limiting، JWT، Clickjacking، CSRF، تعداد مستخدمين | ثغرات مصادقة |
+| 4 | `privesc` | انتحال صلاحية: رؤوس موثوقة مزوّرة، كوكي دور مزوَّر، بارامتر مزوَّر، URL rewrite، JWT forgery | ثغرات تصعيد صلاحية |
+| 5 | `extract` | سحب البيانات: SQLi (error/boolean/UNION PoC)، IDOR | ثغرات سحب بيانات |
+| 6 | `assess` | Access Control، Misconfig، CORS، XSS، 26 ملفاً حساساً مكشوفاً | ثغرات عامة |
+| 7 | `report` | تجمع الكل بتقرير Markdown + JSON بخطورة وتصنيف OWASP | `report.md` / `report.json` |
 
-> `authtest` و `extract` فعّالتان — تحتاجان `--active`.
+> `authtest`، `privesc`، `extract` فعّالة — تحتاج `--active`.
+> فحوص `privesc`/`assess` الحسّاسة للوصول تُجرى بكوكيز معزولة (زائر غير
+> مسجَّل دخول حقيقةً)، حتى لا تختلط صلاحية حقيقية اكتسبتها وحدة أخرى بثغرة
+> انتحال صلاحية.
 > راجع `../docs/DATA-EXTRACTION.md` لمرجع كل التقنيات.
 
 المنسّق (`cli.py`) يربط السلسلة ويشغّلها بأمر واحد.

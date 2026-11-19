@@ -1,6 +1,7 @@
 /
 /robots.txt
 /admin
+/staff
 /login
 /search
 /messages

@@ -22,7 +22,7 @@ from datetime import datetime
 
 from . import verification as vf
 from .httpclient import SafeSession
-from .modules import recon, discover, authtest, extract, assess, report
+from .modules import recon, discover, authtest, privesc, extract, assess, report
 
 
 def _gate(scope_path):
@@ -57,31 +57,36 @@ def cmd_run(args):
                           timeout=args.timeout, max_bytes=args.max_bytes,
                           allow_active=args.active)
 
-    print("▶ [1/6] الاستطلاع (recon)…")
+    print("▶ [1/7] الاستطلاع (recon)…")
     recon_out = recon.run(session, allowed)
 
-    print("▶ [2/6] الاكتشاف (discover)…")
+    print("▶ [2/7] الاكتشاف (discover)…")
     disc_out = discover.run(session, recon_out)
     n_ep = sum(len(d["all_endpoints"]) for d in disc_out.values())
     print(f"    نقاط مكتشفة: {n_ep}")
 
     tag = " [+active]" if args.active else " (آمن — بلا فحوص فعّالة؛ استخدم --active)"
-    print(f"▶ [3/6] فحص المصادقة وتجاوز الدخول (authtest){tag}…")
+    print(f"▶ [3/7] فحص المصادقة وتجاوز الدخول (authtest){tag}…")
     auth_findings = authtest.run(session, disc_out, recon=recon_out,
                                  allow_active=args.active)
     print(f"    نتائج: {len(auth_findings)}")
 
-    print(f"▶ [4/6] سحب البيانات (extract){tag}…")
+    print(f"▶ [4/7] انتحال الصلاحية (privesc){tag}…")
+    priv_findings = privesc.run(session, disc_out, recon=recon_out,
+                                allow_active=args.active)
+    print(f"    نتائج: {len(priv_findings)}")
+
+    print(f"▶ [5/7] سحب البيانات (extract){tag}…")
     ext_findings = extract.run(session, disc_out, allow_active=args.active)
     print(f"    نتائج: {len(ext_findings)}")
 
-    print("▶ [5/6] التقييم العام (assess)…")
+    print("▶ [6/7] التقييم العام (assess)…")
     gen_findings = assess.run(session, disc_out, allow_active=args.active)
     print(f"    نتائج: {len(gen_findings)}")
 
-    findings = auth_findings + ext_findings + gen_findings
+    findings = auth_findings + priv_findings + ext_findings + gen_findings
 
-    print("▶ [6/6] التقرير (report)…")
+    print("▶ [7/7] التقرير (report)…")
     outdir = os.path.join(args.out, datetime.now().strftime("scan-%Y%m%d-%H%M%S"))
     meta = {"targets": allowed, "requests": session.count,
             "active": args.active, "rate": args.rate}

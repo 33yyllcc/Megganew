@@ -158,6 +158,7 @@ def index():
         <li><a href="/messages">الرسائل</a> — <span class="v">Stored XSS</span> + <span class="v">CSRF</span></li>
         <li><a href="/profile?id=1">البروفايل</a> — <span class="v">IDOR / Broken Access Control</span></li>
         <li><a href="/admin">لوحة الأدمن</a> — <span class="v">Missing Access Control</span></li>
+        <li><a href="/staff">لوحة الموظفين</a> — <span class="v">Privilege Escalation (Trusted Header / Cookie Forgery)</span></li>
         <li><a href="/tools">الأدوات</a> — <span class="v">SSRF</span> + <span class="v">Command Injection</span></li>
         <li><a href="/download?file=welcome.txt">تنزيل ملف</a> — <span class="v">Path Traversal</span></li>
         <li><a href="/greet?name=Ahmed">ترحيب</a> — <span class="v">SSTI</span></li>
@@ -301,6 +302,32 @@ def admin():
       <tr><th>id</th><th>user</th><th>role</th><th>api_key</th><th>card</th></tr>
       {tbl}
     </table>
+    """
+    return page(body)
+
+
+# ----------------------------------------------------------------------
+# [VULN-15] Privilege Escalation via Trusted Header / Forged Cookie
+# ----------------------------------------------------------------------
+@app.route("/staff")
+def staff():
+    # [VULN-15a] يثق برأس X-Forwarded-For كأنه دليل "طلب من الشبكة الداخلية"
+    xff = request.headers.get("X-Forwarded-For", "")
+    # [VULN-15b] يثق بكوكي role بدون أي توقيع أو تحقق من جلسة حقيقية
+    role_cookie = request.cookies.get("role", "")
+    is_staff = xff.strip() in ("127.0.0.1", "localhost") or role_cookie == "admin"
+    if not is_staff:
+        resp = make_response(page("<h1>403</h1><p class='v'>ممنوع — موظفون فقط.</p>"))
+        resp.status_code = 403
+        return resp
+    rows = get_db().execute(
+        "SELECT username, private_note, credit_card FROM users").fetchall()
+    tbl = "".join(f"<li>{r['username']}: {r['private_note']} — {r['credit_card']}</li>"
+                  for r in rows)
+    body = f"""
+    <h1>🧑‍💼 لوحة الموظفين (Staff Panel)</h1>
+    <p class="v">يُفترض أنها للموظفين من الشبكة الداخلية فقط!</p>
+    <ul>{tbl}</ul>
     """
     return page(body)
 

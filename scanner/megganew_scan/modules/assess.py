@@ -73,7 +73,7 @@ def _file_exposure_sweep(session, base, findings):
     """يفحص قائمة واسعة من الملفات الحساسة الشائعة على جذر الموقع.
     كل فحص GET واحد، عيّنة إثبات محدودة فقط — لا تنزيل كامل لأي ملف."""
     for path, severity, desc in EXPOSED_FILE_PATHS:
-        r = session.get(base.rstrip("/") + "/" + path)
+        r = session.get(base.rstrip("/") + "/" + path, isolate_cookies=True)
         code = getattr(r, "status_code", 0)
         body = getattr(r, "_body_sample", "")
         if code == 200 and body.strip() and "<html" not in body.lower()[:200]:
@@ -98,7 +98,7 @@ def run(session, discovered, allow_active=False):
 
             # --- exposed secrets/config files ---
             if low.endswith((".env", ".git/config")):
-                r = session.get(ep)
+                r = session.get(ep, isolate_cookies=True)
                 if getattr(r, "status_code", 0) == 200 and getattr(r, "_body_sample", ""):
                     findings.append(_finding(
                         "ملف حساس مكشوف", "عالية", ep,
@@ -108,7 +108,7 @@ def run(session, discovered, allow_active=False):
 
             # --- Broken Access Control: نقاط حساسة بلا مصادقة ---
             if _looks_sensitive(ep):
-                r = session.get(ep)
+                r = session.get(ep, isolate_cookies=True)
                 code = getattr(r, "status_code", 0)
                 body = getattr(r, "_body_sample", "")
                 if code == 200 and len(body) > 20:
@@ -122,7 +122,7 @@ def run(session, discovered, allow_active=False):
                     pass  # محميّة — جيد
 
             # --- Verbose error / stack trace ---
-            r = session.get(ep + ("&" if "?" in ep else "?") + "x='\"<test")
+            r = session.get(ep + ("&" if "?" in ep else "?") + "x='\"<test", isolate_cookies=True)
             body = getattr(r, "_body_sample", "")
             if STACK.search(body):
                 findings.append(_finding(
@@ -137,7 +137,7 @@ def run(session, discovered, allow_active=False):
                     "استخدم استعلامات مُعاملة (parameterized) وتحقّق من المدخلات."))
 
             # --- CORS misconfiguration ---
-            r = session.get(ep, headers={"Origin": "https://evil.example"})
+            r = session.get(ep, headers={"Origin": "https://evil.example"}, isolate_cookies=True)
             acao = getattr(r, "headers", {}).get("Access-Control-Allow-Origin", "")
             acac = getattr(r, "headers", {}).get("Access-Control-Allow-Credentials", "")
             if acao == "https://evil.example" or (acao == "*" and acac == "true"):
@@ -151,7 +151,7 @@ def run(session, discovered, allow_active=False):
                 marker = "mxss" + uuid.uuid4().hex[:6]
                 payload = f"<{marker}>"
                 sep = "&" if "?" in ep else "?"
-                r = session.get(ep + sep + "q=" + payload)
+                r = session.get(ep + sep + "q=" + payload, isolate_cookies=True)
                 if payload in getattr(r, "_body_sample", ""):
                     findings.append(_finding(
                         "انعكاس مدخل بلا ترميز (مؤشّر XSS)", "عالية", ep,
